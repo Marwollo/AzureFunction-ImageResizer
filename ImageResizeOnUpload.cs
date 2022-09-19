@@ -1,11 +1,9 @@
-using System;
 using System.IO;
 using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
 using Microsoft.Extensions.Logging;
-using ImageResizer;
-using Azure.Storage.Blobs;
-using Azure.Storage.Blobs.Models;
+using SixLabors.ImageSharp;
+using SixLabors.ImageSharp.Processing;
+using SixLabors.ImageSharp.Formats.Png;
 
 namespace AzureExamples.Function
 {
@@ -13,26 +11,17 @@ namespace AzureExamples.Function
     {
         [FunctionName("ImageResizeOnUpload")]
         public void Run(
-            [BlobTrigger("images/{name}", Connection = "imagesforresizingstorage_STORAGE")] Stream myBlob,
-            [Blob("resized-images/{name}", FileAccess.Write, Connection = "imagesforresizingstorage_STORAGE")] BlobClient output, 
+            [BlobTrigger("images/{name}", Connection = "imagesforresizingstorage_STORAGE")] Stream input,
+            [Blob("resized-images/resized-{name}", FileAccess.Write, Connection = "imagesforresizingstorage_STORAGE")] Stream output,
             string name, 
             ILogger log)
         {
-            log.LogInformation($"Received file \n Name:{name} \n with size of {myBlob.Length} Bytes");
-            
-            var instructions = new Instructions
-            {
-                Width = 320,
-                Mode = FitMode.Crop,
-                Scale = ScaleMode.Both
-            };
-
-            Stream stream = new MemoryStream();
-            ImageBuilder.Current.Build(new ImageJob(myBlob, stream, instructions));
-            stream.Seek(0, SeekOrigin.Begin);
-
-            output.SetHttpHeaders(new BlobHttpHeaders() { ContentType = "image/png" });
-            output.Upload(stream);
+            log.LogInformation($"Received file with name: {name}, with size of {input.Length} Bytes");
+            using (Image image = Image.Load(input)) {
+                image.Mutate(x => x.Resize(image.Width / 2, image.Height / 2));
+                image.Save(output, new PngEncoder());
+            }
+            log.LogInformation($"Successfully finished resizing the file with name: {name}");
         }
     }
 }
